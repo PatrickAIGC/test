@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PetSnap - 宠物照片分析</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f0f13;
+  --bg2: #1a1a24;
+  --bg3: #24243a;
+  --card: #1e1e2e;
+  --border: #2e2e48;
+  --text: #e2e2f0;
+  --text2: #9494b8;
+  --accent: #7c5cfc;
+  --accent2: #a78bfa;
+  --accent-glow: rgba(124, 92, 252, .25);
+  --green: #34d399;
+  --orange: #fb923c;
+  --pink: #f472b6;
+  --blue: #60a5fa;
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ========== Layout ========== */
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ========== Header ========== */
+.header {
+  text-align: center;
+  padding: 48px 0 32px;
+}
+.header h1 {
+  font-size: 42px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent2), var(--pink), var(--orange));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -1px;
+}
+.header p {
+  color: var(--text2);
+  font-size: 16px;
+  margin-top: 8px;
+}
+
+/* ========== Steps Navigation ========== */
+.steps-nav {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+}
+.step-dot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 50px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  font-size: 14px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .3s;
+  user-select: none;
+}
+.step-dot.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+.step-dot.done {
+  border-color: var(--green);
+  color: var(--green);
+}
+.step-dot .num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255,255,255,.1);
+}
+.step-dot.active .num { background: rgba(255,255,255,.25); }
+.step-dot.done .num::after { content: "\2713"; }
+.step-dot.done .num span { display: none; }
+
+/* ========== Sections ========== */
+.section {
+  display: none;
+  animation: fadeIn .4s ease;
+}
+.section.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ========== Upload Section ========== */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 64px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .3s;
+  background: var(--bg2);
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(124, 92, 252, .05);
+  box-shadow: 0 0 40px var(--accent-glow);
+}
+.upload-zone .icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  display: block;
+}
+.upload-zone h3 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+.upload-zone p {
+  color: var(--text2);
+  font-size: 14px;
+}
+.upload-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Photo Preview Grid */
+.photo-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.preview-card {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--bg3);
+}
+.preview-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.preview-card .remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.7);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.preview-card:hover .remove-btn { opacity: 1; }
+.preview-card .status-badge {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0,0,0,.6);
+  backdrop-filter: blur(4px);
+}
+.preview-card .status-badge.pending { color: var(--text2); }
+.preview-card .status-badge.analyzing { color: var(--orange); }
+.preview-card .status-badge.done { color: var(--green); }
+.preview-card .status-badge.error { color: #ef4444; }
+
+.upload-counter {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 15px;
+  color: var(--text2);
+}
+.upload-counter strong { color: var(--accent2); }
+
+/* ========== Buttons ========== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 32px;
+  border-radius: 50px;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all .3s;
+  text-decoration: none;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #9b6dff);
+  color: #fff;
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px var(--accent-glow);
+}
+.btn-primary:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-secondary {
+  background: var(--bg3);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover {
+  border-color: var(--accent);
+}
+.btn-group {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 32px;
+  flex-wrap: wrap;
+}
+
+/* ========== Analysis Progress ========== */
+.progress-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+.progress-bar-wrapper {
+  background: var(--bg3);
+  border-radius: 50px;
+  height: 12px;
+  overflow: hidden;
+  margin: 24px 0;
+}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--pink));
+  border-radius: 50px;
+  transition: width .5s ease;
+  width: 0%;
+}
+.progress-text {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text2);
+}
+.progress-text strong { color: var(--text); }
+.analyzing-photo-name {
+  text-align: center;
+  color: var(--accent2);
+  font-size: 13px;
+  margin-top: 8px;
+  min-height: 20px;
+}
+
+/* ========== Results Section ========== */
+.results-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  background: var(--bg2);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  overflow-x: auto;
+}
+.results-tab {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .2s;
+}
+.results-tab:hover { color: var(--text); }
+.results-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn .3s ease; }
+
+/* --- All Photos Tab --- */
+.photo-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.photo-result-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: all .3s;
+}
+.photo-result-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+.photo-result-card .card-img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+}
+.photo-result-card .card-body {
+  padding: 16px;
+}
+.photo-result-card .card-desc {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.photo-result-card .card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg3);
+  color: var(--accent2);
+  border: 1px solid var(--border);
+}
+.tag.mood { background: rgba(244,114,182,.12); color: var(--pink); border-color: rgba(244,114,182,.3); }
+.tag.scene { background: rgba(96,165,250,.12); color: var(--blue); border-color: rgba(96,165,250,.3); }
+.tag.activity { background: rgba(52,211,153,.12); color: var(--green); border-color: rgba(52,211,153,.3); }
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.emotion-bar {
+  width: 60px;
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 50px;
+  overflow: hidden;
+}
+.emotion-bar-inner {
+  height: 100%;
+  border-radius: 50px;
+  background: linear-gradient(90deg, var(--blue), var(--pink));
+}
+
+/* --- Albums Tab --- */
+.album-section {
+  margin-bottom: 32px;
+}
+.album-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.album-header h3 {
+  font-size: 18px;
+}
+.album-header .album-count {
+  background: var(--accent);
+  color: #fff;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.album-header .album-desc {
+  color: var(--text2);
+  font-size: 13px;
+}
+.album-photos {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.album-photos::-webkit-scrollbar { height: 6px; }
+.album-photos::-webkit-scrollbar-track { background: var(--bg2); border-radius: 3px; }
+.album-photos::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.album-photo-item {
+  flex-shrink: 0;
+  width: 160px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+}
+.album-photo-item img {
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+}
+.album-photo-item .name {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Profile Tab --- */
+.profile-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 32px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.profile-card h3 {
+  font-size: 22px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.profile-row:last-child { border-bottom: none; }
+.profile-label { color: var(--text2); }
+.profile-value { font-weight: 600; }
+.profile-tags {
+  margin-top: 24px;
+}
+.profile-tags h4 {
+  font-size: 14px;
+  color: var(--text2);
+  margin-bottom: 12px;
+}
+.profile-tags .tags-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tag-cloud-item {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.tag-cloud-item.hot {
+  background: linear-gradient(135deg, var(--accent), #9b6dff);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* --- Story Tab --- */
+.story-directions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.story-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  padding: 24px;
+  cursor: pointer;
+  transition: all .3s;
+}
+.story-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.story-card.selected {
+  border-color: var(--accent);
+  background: rgba(124, 92, 252, .08);
+  box-shadow: 0 0 30px var(--accent-glow);
+}
+.story-card h4 {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+.story-card p {
+  color: var(--text2);
+  font-size: 13px;
+}
+.story-card .related {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.story-input-area {
+  margin-top: 24px;
+}
+.story-input-area textarea {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  color: var(--text);
+  font-size: 14px;
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+.story-input-area textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.story-output {
+  margin-top: 24px;
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 32px;
+  line-height: 1.9;
+  font-size: 15px;
+  white-space: pre-wrap;
+  display: none;
+}
+.story-output.visible { display: block; animation: fadeIn .5s ease; }
+
+/* ========== Loading Spinner ========== */
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ========== Empty State ========== */
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--text2);
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; display: block; }
+
+/* ========== Photo Detail Modal ========== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.8);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.visible { display: flex; }
+.modal-content {
+  background: var(--card);
+  border-radius: var(--radius);
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+}
+.modal-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  margin: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg3);
+  border: none;
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 1;
+}
+.modal-img {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  background: #000;
+}
+.modal-body { padding: 24px; }
+.modal-body h3 { margin-bottom: 12px; }
+.modal-body .desc { color: var(--text2); margin-bottom: 16px; }
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.detail-item {
+  background: var(--bg2);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+}
+.detail-item .label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.detail-item .value { font-size: 14px; font-weight: 600; }
+
+/* ========== Responsive ========== */
+@media (max-width: 640px) {
+  .header h1 { font-size: 28px; }
+  .steps-nav { gap: 6px; }
+  .step-dot { padding: 8px 12px; font-size: 12px; }
+  .step-dot .label { display: none; }
+  .upload-zone { padding: 40px 20px; }
+  .photo-preview-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .photo-result-grid { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Header -->
+  <div class="header">
+    <h1>PetSnap</h1>
+    <p>AI 宠物照片分析 &middot; 智能归类 &middot; 故事创作</p>
+  </div>
+
+  <!-- Steps Navigation -->
+  <div class="steps-nav">
+    <div class="step-dot active" data-step="upload" onclick="goToStep('upload')">
+      <div class="num"><span>1</span></div>
+      <span class="label">上传照片</span>
+    </div>
+    <div class="step-dot" data-step="analyze" onclick="goToStep('analyze')">
+      <div class="num"><span>2</span></div>
+      <span class="label">AI 分析</span>
+    </div>
+    <div class="step-dot" data-step="results" onclick="goToStep('results')">
+      <div class="num"><span>3</span></div>
+      <span class="label">查看结果</span>
+    </div>
+  </div>
+
+  <!-- ==================== Section 1: Upload ==================== -->
+  <div class="section active" id="section-upload">
+    <div class="upload-zone" id="dropZone">
+      <span class="icon">📸</span>
+      <h3>拖拽照片到这里，或点击选择</h3>
+      <p>支持 JPG / PNG / HEIC / WEBP，最多 30 张</p>
+      <input type="file" id="fileInput" multiple accept="image/*">
+    </div>
+
+    <div class="upload-counter" id="uploadCounter" style="display:none">
+      已选择 <strong id="photoCount">0</strong> 张照片
+    </div>
+
+    <div class="photo-preview-grid" id="previewGrid"></div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" id="btnUpload" disabled onclick="uploadPhotos()">
+        上传并继续
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== Section 2: Analyze ==================== -->
+  <div class="section" id="section-analyze">
+    <div class="progress-container">
+      <h2 style="text-align:center; margin-bottom: 8px;">AI 正在分析你的照片</h2>
+      <p style="text-align:center; color:var(--text2); margin-bottom:24px;">
+        使用 GPT-4 Vision 识别宠物信息、场景、情绪和标签
+      </p>
+      <div class="progress-bar-wrapper">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="progress-text">
+        <strong id="progressCurrent">0</strong> / <strong id="progressTotal">0</strong> 张完成
+      </div>
+      <div class="analyzing-photo-name" id="analyzingName"></div>
+    </div>
+
+    <!-- Analyzed preview -->
+    <div class="photo-preview-grid" id="analyzePreviewGrid" style="margin-top:32px;"></div>
+  </div>
+
+  <!-- ==================== Section 3: Results ==================== -->
+  <div class="section" id="section-results">
+    <div class="results-tabs">
+      <button class="results-tab active" onclick="switchTab('all')">全部照片</button>
+      <button class="results-tab" onclick="switchTab('albums')">智能相册</button>
+      <button class="results-tab" onclick="switchTab('profile')">宠物档案</button>
+      <button class="results-tab" onclick="switchTab('story')">写故事</button>
+    </div>
+
+    <!-- Tab: All Photos -->
+    <div class="tab-content active" id="tab-all">
+      <div class="photo-result-grid" id="resultGrid"></div>
+    </div>
+
+    <!-- Tab: Albums -->
+    <div class="tab-content" id="tab-albums">
+      <div id="albumsContainer"></div>
+    </div>
+
+    <!-- Tab: Profile -->
+    <div class="tab-content" id="tab-profile">
+      <div id="profileContainer"></div>
+    </div>
+
+    <!-- Tab: Story -->
+    <div class="tab-content" id="tab-story">
+      <h3 style="margin-bottom:16px;">选择一个故事方向</h3>
+      <div class="story-directions" id="storyDirections"></div>
+      <div class="story-input-area" id="storyInputArea" style="display:none;">
+        <label style="font-size:14px; color:var(--text2); display:block; margin-bottom:8px;">
+          有什么想补充的？（可选）
+        </label>
+        <textarea id="storyNotes" placeholder="例如：它叫豆豆，最喜欢在阳台晒太阳..."></textarea>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btnGenStory" onclick="generateStory()">
+            生成故事
+          </button>
+        </div>
+      </div>
+      <div class="story-output" id="storyOutput"></div>
+    </div>
+
+    <!-- Export -->
+    <div class="btn-group" style="margin-top:40px;">
+      <button class="btn btn-secondary" onclick="exportResults()">
+        导出 JSON
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Detail Modal -->
+<div class="modal-overlay" id="photoModal">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <img class="modal-img" id="modalImg" src="" alt="">
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let selectedFiles = [];      // File objects pending upload
+let uploadedPhotos = [];     // {photo_id, filename, display_name, url, file_size}
+let analysisResults = [];    // photo analysis results
+let albumsData = {};
+let profileData = {};
+let storyPrompts = [];
+let selectedStoryIdx = -1;
+
+// ============================================================
+// Step Navigation
+// ============================================================
+function goToStep(step) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-' + step).classList.add('active');
+  document.querySelectorAll('.step-dot').forEach(d => d.classList.remove('active'));
+  document.querySelector(`.step-dot[data-step="${step}"]`).classList.add('active');
+}
+
+function markStepDone(step) {
+  document.querySelector(`.step-dot[data-step="${step}"]`).classList.add('done');
+}
+
+// ============================================================
+// File Selection & Preview
+// ============================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const previewGrid = document.getElementById('previewGrid');
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  const arr = Array.from(files).filter(f => f.type.startsWith('image/'));
+  for (const f of arr) {
+    if (selectedFiles.length >= 30) break;
+    if (!selectedFiles.some(s => s.name === f.name && s.size === f.size)) {
+      selectedFiles.push(f);
+    }
+  }
+  renderPreviews();
+}
+
+function removeFile(idx) {
+  selectedFiles.splice(idx, 1);
+  renderPreviews();
+}
+
+function renderPreviews() {
+  const counter = document.getElementById('uploadCounter');
+  const countEl = document.getElementById('photoCount');
+  const btn = document.getElementById('btnUpload');
+
+  if (selectedFiles.length > 0) {
+    counter.style.display = 'block';
+    countEl.textContent = selectedFiles.length;
+    btn.disabled = false;
+  } else {
+    counter.style.display = 'none';
+    btn.disabled = true;
+  }
+
+  previewGrid.innerHTML = '';
+  selectedFiles.forEach((file, i) => {
+    const card = document.createElement('div');
+    card.className = 'preview-card';
+    const url = URL.createObjectURL(file);
+    card.innerHTML = `
+      <img src="${url}" alt="${file.name}">
+      <button class="remove-btn" onclick="removeFile(${i})">&times;</button>
+      <span class="status-badge pending">待上传</span>
+    `;
+    previewGrid.appendChild(card);
+  });
+}
+
+// ============================================================
+// Upload
+// ============================================================
+async function uploadPhotos() {
+  if (selectedFiles.length === 0) return;
+
+  const btn = document.getElementById('btnUpload');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 上传中...';
+
+  const formData = new FormData();
+  selectedFiles.forEach(f => formData.append('photos', f));
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (!data.success) {
+      alert(data.error || '上传失败');
+      btn.disabled = false;
+      btn.textContent = '上传并继续';
+      return;
+    }
+
+    uploadedPhotos = data.photos;
+    markStepDone('upload');
+    startAnalysis();
+  } catch (err) {
+    alert('上传出错: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = '上传并继续';
+  }
+}
+
+// ============================================================
+// Analysis (one by one for progress)
+// ============================================================
+async function startAnalysis() {
+  goToStep('analyze');
+  const total = uploadedPhotos.length;
+  const progressBar = document.getElementById('progressBar');
+  const progressCurrent = document.getElementById('progressCurrent');
+  const progressTotal = document.getElementById('progressTotal');
+  const analyzingName = document.getElementById('analyzingName');
+  const analyzeGrid = document.getElementById('analyzePreviewGrid');
+
+  progressTotal.textContent = total;
+  analysisResults = [];
+
+  // Build preview grid
+  analyzeGrid.innerHTML = '';
+  uploadedPhotos.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'preview-card';
+    card.id = 'analyze-card-' + p.photo_id;
+    card.innerHTML = `
+      <img src="${p.url}" alt="${p.filename}">
+      <span class="status-badge pending" id="badge-${p.photo_id}">等待中</span>
+    `;
+    analyzeGrid.appendChild(card);
+  });
+
+  for (let i = 0; i < total; i++) {
+    const photo = uploadedPhotos[i];
+    analyzingName.textContent = '正在分析: ' + photo.filename;
+
+    const badge = document.getElementById('badge-' + photo.photo_id);
+    if (badge) { badge.className = 'status-badge analyzing'; badge.textContent = '分析中...'; }
+
+    try {
+      const res = await fetch('/api/analyze/' + photo.photo_id, { method: 'POST' });
+      const data = await res.json();
+
+      if (data.success) {
+        analysisResults.push(data.result);
+        if (badge) { badge.className = 'status-badge done'; badge.textContent = '完成'; }
+      } else {
+        if (badge) { badge.className = 'status-badge error'; badge.textContent = '失败'; }
+      }
+    } catch {
+      if (badge) { badge.className = 'status-badge error'; badge.textContent = '失败'; }
+    }
+
+    progressCurrent.textContent = i + 1;
+    progressBar.style.width = ((i + 1) / total * 100) + '%';
+  }
+
+  analyzingName.textContent = '分析完成！';
+  markStepDone('analyze');
+
+  // Load results
+  await Promise.all([loadAlbums(), loadProfile(), loadStoryPrompts()]);
+  renderResults();
+
+  // Auto-go to results after short delay
+  setTimeout(() => goToStep('results'), 800);
+}
+
+// ============================================================
+// Load data
+// ============================================================
+async function loadAlbums() {
+  try {
+    const res = await fetch('/api/albums');
+    const data = await res.json();
+    if (data.success) albumsData = data.albums;
+  } catch {}
+}
+
+async function loadProfile() {
+  try {
+    const res = await fetch('/api/profile');
+    const data = await res.json();
+    if (data.success) profileData = data.profile;
+  } catch {}
+}
+
+async function loadStoryPrompts() {
+  try {
+    const res = await fetch('/api/story/prompts');
+    const data = await res.json();
+    if (data.success) storyPrompts = data.prompts;
+  } catch {}
+}
+
+// ============================================================
+// Render Results
+// ============================================================
+function renderResults() {
+  renderAllPhotos();
+  renderAlbums();
+  renderProfile();
+  renderStoryDirections();
+}
+
+function getPhotoUrl(photoId) {
+  const p = uploadedPhotos.find(u => u.photo_id === photoId);
+  return p ? p.url : '';
+}
+
+function getPhotoUrlByFilename(filename) {
+  // Match by original filename
+  const idx = analysisResults.findIndex(r => r.filename === filename);
+  if (idx >= 0 && uploadedPhotos[idx]) return uploadedPhotos[idx].url;
+  // Fallback: try matching
+  const p = uploadedPhotos.find(u => u.filename === filename);
+  return p ? p.url : '';
+}
+
+// --- All Photos ---
+function renderAllPhotos() {
+  const grid = document.getElementById('resultGrid');
+  grid.innerHTML = '';
+
+  analysisResults.forEach((r, i) => {
+    const url = uploadedPhotos[i] ? uploadedPhotos[i].url : '';
+    const cats = r.categories || {};
+    const card = document.createElement('div');
+    card.className = 'photo-result-card';
+    card.onclick = () => openModal(r, url);
+    card.innerHTML = `
+      <img class="card-img" src="${url}" alt="${r.filename}">
+      <div class="card-body">
+        <div class="card-desc">${r.description || ''}</div>
+        <div class="card-tags">
+          ${cats.mood ? `<span class="tag mood">${cats.mood}</span>` : ''}
+          ${cats.scene ? `<span class="tag scene">${cats.scene}</span>` : ''}
+          ${cats.activity ? `<span class="tag activity">${cats.activity}</span>` : ''}
+          ${(r.tags || []).slice(0, 3).map(t => `<span class="tag">${t}</span>`).join('')}
+        </div>
+        <div class="card-meta">
+          <span>${r.pet_info?.breed || ''}</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span>${r.emotion_score}/10</span>
+            <div class="emotion-bar">
+              <div class="emotion-bar-inner" style="width:${(r.emotion_score||5)*10}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// --- Albums ---
+function renderAlbums() {
+  const container = document.getElementById('albumsContainer');
+  const albumIcons = {
+    daily_life: '🏠', outdoor_adventure: '🌿', funny_moments: '😂',
+    sleeping_beauty: '😴', eating_time: '🍖', with_friends: '🤝',
+    portrait: '📷', growth: '🌱'
+  };
+
+  if (Object.keys(albumsData).length === 0) {
+    container.innerHTML = '<div class="empty-state"><span class="icon">📁</span><p>没有生成相册分类</p></div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  for (const [key, album] of Object.entries(albumsData)) {
+    const sec = document.createElement('div');
+    sec.className = 'album-section';
+    sec.innerHTML = `
+      <div class="album-header">
+        <span style="font-size:28px;">${albumIcons[key] || '📂'}</span>
+        <div>
+          <h3>${album.name} <span class="album-count">${album.photo_count}</span></h3>
+          <span class="album-desc">${album.description}</span>
+        </div>
+      </div>
+      <div class="album-photos">
+        ${album.photos.map(p => {
+          const url = getPhotoUrl(p.photo_id);
+          return `
+            <div class="album-photo-item" onclick='openModal(${JSON.stringify(p).replace(/'/g, "&#39;")}, "${url}")'>
+              <img src="${url}" alt="${p.filename}">
+              <div class="name">${p.filename}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+    container.appendChild(sec);
+  }
+}
+
+// --- Profile ---
+function renderProfile() {
+  const container = document.getElementById('profileContainer');
+  const p = profileData;
+
+  if (!p || !p.pet_type) {
+    container.innerHTML = '<div class="empty-state"><span class="icon">🐾</span><p>暂无宠物档案</p></div>';
+    return;
+  }
+
+  const tags = (p.top_tags || []);
+  container.innerHTML = `
+    <div class="profile-card">
+      <h3>🐾 宠物档案</h3>
+      <div class="profile-row">
+        <span class="profile-label">宠物类型</span>
+        <span class="profile-value">${p.pet_type}</span>
+      </div>
+      <div class="profile-row">
+        <span class="profile-label">品种</span>
+        <span class="profile-value">${p.breed}</span>
+      </div>
+      <div class="profile-row">
+        <span class="profile-label">主要毛色</span>
+        <span class="profile-value">${p.main_color}</span>
+      </div>
+      <div class="profile-row">
+        <span class="profile-label">照片数量</span>
+        <span class="profile-value">${p.photo_count} 张</span>
+      </div>
+      <div class="profile-row">
+        <span class="profile-label">情感均分</span>
+        <span class="profile-value">${p.avg_emotion_score} / 10</span>
+      </div>
+      ${p.distinctive_features && p.distinctive_features.length > 0 ? `
+      <div class="profile-row">
+        <span class="profile-label">显著特征</span>
+        <span class="profile-value">${p.distinctive_features.join('、')}</span>
+      </div>` : ''}
+      <div class="profile-tags">
+        <h4>热门标签</h4>
+        <div class="tags-cloud">
+          ${tags.map((t, i) => {
+            const tag = Array.isArray(t) ? t[0] : t;
+            const cls = i < 3 ? 'tag-cloud-item hot' : 'tag-cloud-item';
+            return `<span class="${cls}">${tag}</span>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- Story ---
+function renderStoryDirections() {
+  const container = document.getElementById('storyDirections');
+  if (storyPrompts.length === 0) {
+    container.innerHTML = '<div class="empty-state"><span class="icon">📖</span><p>分析更多照片后可生成故事方向</p></div>';
+    return;
+  }
+
+  const icons = ['☀️', '🏔️', '🌱', '😂', '💕'];
+  container.innerHTML = storyPrompts.map((sp, i) => `
+    <div class="story-card" id="story-card-${i}" onclick="selectStory(${i})">
+      <h4>${icons[i] || '📖'} ${sp.title}</h4>
+      <p>${sp.description}</p>
+      <div class="related">相关照片: ${(sp.related_photos || []).slice(0, 3).join(', ')}</div>
+    </div>
+  `).join('');
+}
+
+function selectStory(idx) {
+  selectedStoryIdx = idx;
+  document.querySelectorAll('.story-card').forEach((c, i) => {
+    c.classList.toggle('selected', i === idx);
+  });
+  document.getElementById('storyInputArea').style.display = 'block';
+  document.getElementById('storyOutput').classList.remove('visible');
+}
+
+async function generateStory() {
+  if (selectedStoryIdx < 0) return;
+  const sp = storyPrompts[selectedStoryIdx];
+  const notes = document.getElementById('storyNotes').value;
+  const btn = document.getElementById('btnGenStory');
+  const output = document.getElementById('storyOutput');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 生成中...';
+  output.classList.remove('visible');
+
+  try {
+    const res = await fetch('/api/story/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ story_direction: sp, user_notes: notes }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      output.textContent = data.story;
+      output.classList.add('visible');
+    } else {
+      alert(data.error || '生成失败');
+    }
+  } catch (err) {
+    alert('生成出错: ' + err.message);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '生成故事';
+}
+
+// ============================================================
+// Modal
+// ============================================================
+function openModal(result, imgUrl) {
+  const modal = document.getElementById('photoModal');
+  const img = document.getElementById('modalImg');
+  const body = document.getElementById('modalBody');
+
+  img.src = imgUrl;
+  const cats = result.categories || {};
+  const pet = result.pet_info || {};
+
+  body.innerHTML = `
+    <h3>${result.filename}</h3>
+    <p class="desc">${result.description || ''}</p>
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="label">宠物类型</div>
+        <div class="value">${pet.type || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">品种</div>
+        <div class="value">${pet.breed || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">毛色</div>
+        <div class="value">${pet.color || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">体型</div>
+        <div class="value">${pet.size || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">年龄段</div>
+        <div class="value">${pet.estimated_age || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">情感分数</div>
+        <div class="value">${result.emotion_score || '-'} / 10</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">场景</div>
+        <div class="value">${cats.scene || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">活动</div>
+        <div class="value">${cats.activity || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">情绪</div>
+        <div class="value">${cats.mood || '-'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="label">构图</div>
+        <div class="value">${cats.composition || '-'}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <span style="font-size:13px;color:var(--text2);">显著特征: </span>
+      <span style="font-size:14px;">${pet.distinctive_features || '-'}</span>
+    </div>
+    <div class="card-tags">
+      ${(result.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}
+    </div>
+    ${result.story_keywords && result.story_keywords.length > 0 ? `
+    <div style="margin-top:16px;">
+      <span style="font-size:13px;color:var(--text2);">故事关键词: </span>
+      ${result.story_keywords.map(k => `<span class="tag" style="background:rgba(251,146,60,.12);color:var(--orange);border-color:rgba(251,146,60,.3);">${k}</span>`).join(' ')}
+    </div>` : ''}
+  `;
+
+  modal.classList.add('visible');
+}
+
+function closeModal() {
+  document.getElementById('photoModal').classList.remove('visible');
+}
+
+document.getElementById('photoModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// ============================================================
+// Tabs
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.results-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// ============================================================
+// Export
+// ============================================================
+async function exportResults() {
+  try {
+    const res = await fetch('/api/export');
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pet_photo_analysis.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('导出失败: ' + err.message);
+  }
+}
+</script>
+
+</body>
+</html>
