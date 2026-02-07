@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PetSnap - 宠物照片分析</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f13; --bg2: #1a1a24; --bg3: #24243a; --card: #1e1e2e;
+  --border: #2e2e48; --text: #e2e2f0; --text2: #9494b8;
+  --accent: #7c5cfc; --accent2: #a78bfa; --accent-glow: rgba(124,92,252,.25);
+  --green: #34d399; --orange: #fb923c; --pink: #f472b6; --blue: #60a5fa;
+  --radius: 16px; --radius-sm: 10px;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh;
+}
+.container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+/* ========== Header ========== */
+.header { text-align: center; padding: 40px 0 24px; }
+.header h1 {
+  font-size: 40px; font-weight: 800;
+  background: linear-gradient(135deg, var(--accent2), var(--pink), var(--orange));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.header p { color: var(--text2); font-size: 15px; margin-top: 6px; }
+
+/* ========== API Key Bar ========== */
+.api-bar {
+  display: flex; gap: 10px; max-width: 600px; margin: 0 auto 32px; align-items: center;
+}
+.api-bar input {
+  flex: 1; padding: 12px 16px; border-radius: 50px; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--text); font-size: 14px; outline: none;
+}
+.api-bar input:focus { border-color: var(--accent); }
+.api-bar .status {
+  width: 10px; height: 10px; border-radius: 50%; background: #ef4444; flex-shrink: 0;
+}
+.api-bar .status.ok { background: var(--green); }
+
+/* ========== Steps Nav ========== */
+.steps-nav { display: flex; justify-content: center; gap: 8px; margin-bottom: 32px; flex-wrap: wrap; }
+.step-dot {
+  display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 50px;
+  border: 1px solid var(--border); background: var(--bg2); font-size: 14px;
+  color: var(--text2); cursor: pointer; transition: all .3s; user-select: none;
+}
+.step-dot.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 20px var(--accent-glow); }
+.step-dot.done { border-color: var(--green); color: var(--green); }
+.step-num {
+  width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.1);
+}
+
+/* ========== Sections ========== */
+.section { display: none; animation: fadeIn .4s ease; }
+.section.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ========== Upload ========== */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius); padding: 56px 32px;
+  text-align: center; cursor: pointer; transition: all .3s; background: var(--bg2); position: relative;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent); background: rgba(124,92,252,.05); box-shadow: 0 0 40px var(--accent-glow);
+}
+.upload-zone .icon { font-size: 56px; margin-bottom: 12px; display: block; }
+.upload-zone h3 { font-size: 18px; margin-bottom: 6px; }
+.upload-zone p { color: var(--text2); font-size: 13px; }
+.upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.photo-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 20px;
+}
+.photo-thumb {
+  position: relative; aspect-ratio: 1; border-radius: var(--radius-sm);
+  overflow: hidden; border: 2px solid var(--border); background: var(--bg3);
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.photo-thumb .del {
+  position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(0,0,0,.7); color: #fff; border: none; cursor: pointer;
+  font-size: 13px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: .2s;
+}
+.photo-thumb:hover .del { opacity: 1; }
+.photo-thumb .badge {
+  position: absolute; bottom: 4px; left: 4px; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 600; background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
+}
+.badge-pending { color: var(--text2); }
+.badge-ing { color: var(--orange); }
+.badge-done { color: var(--green); }
+.badge-err { color: #ef4444; }
+
+.counter { text-align: center; margin-top: 16px; font-size: 14px; color: var(--text2); }
+.counter strong { color: var(--accent2); }
+
+/* ========== Buttons ========== */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 13px 30px; border-radius: 50px;
+  border: none; cursor: pointer; font-size: 15px; font-weight: 600; transition: all .3s;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #9b6dff); color: #fff;
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--accent-glow); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); }
+.btn-group { display: flex; justify-content: center; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+
+/* ========== Progress ========== */
+.progress-wrap { max-width: 560px; margin: 0 auto; }
+.pbar-outer { background: var(--bg3); border-radius: 50px; height: 10px; overflow: hidden; margin: 20px 0; }
+.pbar-inner {
+  height: 100%; background: linear-gradient(90deg, var(--accent), var(--pink));
+  border-radius: 50px; transition: width .5s; width: 0%;
+}
+.ptxt { text-align: center; font-size: 14px; color: var(--text2); }
+.ptxt strong { color: var(--text); }
+.pname { text-align: center; color: var(--accent2); font-size: 13px; margin-top: 6px; min-height: 18px; }
+
+/* ========== Results Tabs ========== */
+.tabs {
+  display: flex; gap: 4px; margin-bottom: 24px; background: var(--bg2);
+  border-radius: var(--radius-sm); padding: 4px; overflow-x: auto;
+}
+.tab-btn {
+  padding: 10px 20px; border-radius: 8px; border: none; background: transparent;
+  color: var(--text2); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: .2s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { background: var(--accent); color: #fff; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; animation: fadeIn .3s ease; }
+
+/* ========== Photo Result Cards ========== */
+.result-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px;
+}
+.rcard {
+  background: var(--card); border-radius: var(--radius); overflow: hidden;
+  border: 1px solid var(--border); transition: all .3s; cursor: pointer;
+}
+.rcard:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.rcard-img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+.rcard-body { padding: 14px; }
+.rcard-desc {
+  font-size: 13px; color: var(--text2); margin-bottom: 10px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rcard-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag {
+  display: inline-block; padding: 2px 9px; border-radius: 20px;
+  font-size: 11px; font-weight: 500; background: var(--bg3); color: var(--accent2); border: 1px solid var(--border);
+}
+.tag-mood { background: rgba(244,114,182,.1); color: var(--pink); border-color: rgba(244,114,182,.25); }
+.tag-scene { background: rgba(96,165,250,.1); color: var(--blue); border-color: rgba(96,165,250,.25); }
+.tag-act { background: rgba(52,211,153,.1); color: var(--green); border-color: rgba(52,211,153,.25); }
+.rcard-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 10px; font-size: 12px; color: var(--text2);
+}
+.emo-bar { width: 50px; height: 5px; background: var(--bg3); border-radius: 50px; overflow: hidden; }
+.emo-fill { height: 100%; border-radius: 50px; background: linear-gradient(90deg, var(--blue), var(--pink)); }
+
+/* ========== Albums ========== */
+.album-sec { margin-bottom: 28px; }
+.album-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.album-hdr h3 { font-size: 17px; }
+.album-cnt { background: var(--accent); color: #fff; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.album-hdr .album-d { color: var(--text2); font-size: 12px; }
+.album-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.album-row::-webkit-scrollbar { height: 5px; }
+.album-row::-webkit-scrollbar-track { background: var(--bg2); border-radius: 3px; }
+.album-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.album-item {
+  flex-shrink: 0; width: 150px; border-radius: var(--radius-sm);
+  overflow: hidden; border: 1px solid var(--border); background: var(--bg3); cursor: pointer;
+}
+.album-item img { width: 150px; height: 112px; object-fit: cover; display: block; }
+.album-item .name {
+  padding: 5px 8px; font-size: 11px; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ========== Profile ========== */
+.profile-card {
+  background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+  padding: 28px; max-width: 560px; margin: 0 auto;
+}
+.profile-card h3 { font-size: 20px; margin-bottom: 20px; text-align: center; }
+.prow { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.prow:last-child { border-bottom: none; }
+.plabel { color: var(--text2); }
+.pvalue { font-weight: 600; }
+.ptags { margin-top: 20px; }
+.ptags h4 { font-size: 13px; color: var(--text2); margin-bottom: 10px; }
+.tags-cloud { display: flex; flex-wrap: wrap; gap: 7px; }
+.tc-item {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px;
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+}
+.tc-item.hot { background: linear-gradient(135deg, var(--accent), #9b6dff); color: #fff; border-color: transparent; }
+
+/* ========== Story ========== */
+.story-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.scard {
+  background: var(--card); border-radius: var(--radius); border: 2px solid var(--border);
+  padding: 20px; cursor: pointer; transition: all .3s;
+}
+.scard:hover { border-color: var(--accent); transform: translateY(-2px); }
+.scard.selected { border-color: var(--accent); background: rgba(124,92,252,.08); box-shadow: 0 0 30px var(--accent-glow); }
+.scard h4 { font-size: 16px; margin-bottom: 6px; }
+.scard p { color: var(--text2); font-size: 13px; }
+.scard .srel { margin-top: 10px; font-size: 11px; color: var(--text2); }
+.story-input { margin-top: 20px; }
+.story-input textarea {
+  width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 14px; color: var(--text); font-size: 14px; resize: vertical; min-height: 72px; font-family: inherit;
+}
+.story-input textarea:focus { outline: none; border-color: var(--accent); }
+.story-out {
+  margin-top: 20px; background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+  padding: 28px; line-height: 1.9; font-size: 15px; white-space: pre-wrap; display: none;
+}
+.story-out.show { display: block; animation: fadeIn .5s ease; }
+
+/* ========== Modal ========== */
+.modal-bg {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1000;
+  align-items: center; justify-content: center; padding: 16px;
+}
+.modal-bg.show { display: flex; }
+.modal-box {
+  background: var(--card); border-radius: var(--radius); max-width: 780px; width: 100%;
+  max-height: 90vh; overflow-y: auto; border: 1px solid var(--border);
+}
+.modal-x {
+  position: sticky; top: 0; float: right; margin: 10px; width: 34px; height: 34px;
+  border-radius: 50%; background: var(--bg3); border: none; color: var(--text); font-size: 18px; cursor: pointer; z-index: 1;
+}
+.modal-img { width: 100%; max-height: 380px; object-fit: contain; background: #000; display: block; }
+.modal-body { padding: 20px; }
+.modal-body h3 { margin-bottom: 10px; }
+.modal-body .desc { color: var(--text2); margin-bottom: 14px; font-size: 14px; }
+.dgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.ditem { background: var(--bg2); padding: 10px; border-radius: var(--radius-sm); }
+.ditem .dl { font-size: 11px; color: var(--text2); margin-bottom: 3px; }
+.ditem .dv { font-size: 13px; font-weight: 600; }
+
+/* ========== Spinner ========== */
+.spin { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: sp .6s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* ========== Empty ========== */
+.empty { text-align: center; padding: 40px; color: var(--text2); }
+.empty .icon { font-size: 42px; margin-bottom: 10px; display: block; }
+
+/* ========== Responsive ========== */
+@media(max-width:640px) {
+  .header h1 { font-size: 28px; }
+  .step-dot .lbl { display: none; }
+  .photo-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+  .result-grid { grid-template-columns: 1fr; }
+  .dgrid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>PetSnap</h1>
+    <p>AI 宠物照片分析 · 智能归类 · 故事创作</p>
+  </div>
+
+  <!-- API Key -->
+  <div class="api-bar">
+    <div class="status" id="apiStatus"></div>
+    <input type="password" id="apiKeyInput" placeholder="输入你的 OpenAI API Key（sk-...）" oninput="checkKey()">
+  </div>
+
+  <!-- Steps -->
+  <div class="steps-nav">
+    <div class="step-dot active" data-s="upload" onclick="go('upload')"><div class="step-num">1</div><span class="lbl">上传照片</span></div>
+    <div class="step-dot" data-s="analyze" onclick="go('analyze')"><div class="step-num">2</div><span class="lbl">AI 分析</span></div>
+    <div class="step-dot" data-s="results" onclick="go('results')"><div class="step-num">3</div><span class="lbl">查看结果</span></div>
+  </div>
+
+  <!-- ===== Upload ===== -->
+  <div class="section active" id="sec-upload">
+    <div class="upload-zone" id="dropZone">
+      <span class="icon">📸</span>
+      <h3>拖拽照片到这里，或点击选择</h3>
+      <p>支持 JPG / PNG / HEIC / WEBP，最多 30 张</p>
+      <input type="file" id="fileInput" multiple accept="image/*">
+    </div>
+    <div class="counter" id="counter" style="display:none">已选择 <strong id="cnt">0</strong> 张照片</div>
+    <div class="photo-grid" id="previewGrid"></div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="btnStart" disabled onclick="startAnalysis()">开始分析</button>
+    </div>
+  </div>
+
+  <!-- ===== Analyze ===== -->
+  <div class="section" id="sec-analyze">
+    <div class="progress-wrap">
+      <h2 style="text-align:center;margin-bottom:6px;">AI 正在分析你的照片</h2>
+      <p style="text-align:center;color:var(--text2);margin-bottom:20px;font-size:14px;">使用 GPT-4o Vision 识别宠物信息、场景、情绪和标签</p>
+      <div class="pbar-outer"><div class="pbar-inner" id="pbar"></div></div>
+      <div class="ptxt"><strong id="pCur">0</strong> / <strong id="pTot">0</strong> 张完成</div>
+      <div class="pname" id="pName"></div>
+    </div>
+    <div class="photo-grid" id="analyzeGrid" style="margin-top:28px;"></div>
+  </div>
+
+  <!-- ===== Results ===== -->
+  <div class="section" id="sec-results">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="stab('all',this)">全部照片</button>
+      <button class="tab-btn" onclick="stab('albums',this)">智能相册</button>
+      <button class="tab-btn" onclick="stab('profile',this)">宠物档案</button>
+      <button class="tab-btn" onclick="stab('story',this)">写故事</button>
+    </div>
+
+    <div class="tab-pane active" id="tp-all"><div class="result-grid" id="resGrid"></div></div>
+    <div class="tab-pane" id="tp-albums"><div id="albumBox"></div></div>
+    <div class="tab-pane" id="tp-profile"><div id="profBox"></div></div>
+    <div class="tab-pane" id="tp-story">
+      <h3 style="margin-bottom:14px;">选择一个故事方向</h3>
+      <div class="story-grid" id="storyGrid"></div>
+      <div class="story-input" id="storyIn" style="display:none;">
+        <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:6px;">有什么想补充的？（可选）</label>
+        <textarea id="storyNotes" placeholder="例如：它叫豆豆，最喜欢在阳台晒太阳..."></textarea>
+        <div class="btn-group"><button class="btn btn-primary" id="btnStory" onclick="genStory()">生成故事</button></div>
+      </div>
+      <div class="story-out" id="storyOut"></div>
+    </div>
+
+    <div class="btn-group" style="margin-top:36px;">
+      <button class="btn btn-secondary" onclick="exportJSON()">导出 JSON</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal" onclick="if(event.target===this)closeM()">
+  <div class="modal-box">
+    <button class="modal-x" onclick="closeM()">&times;</button>
+    <img class="modal-img" id="mImg">
+    <div class="modal-body" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+// ====== State ======
+let files = [];         // {file, url, name}
+let results = [];       // analysis results
+let albumsData = {};
+let profileData = {};
+let storyPrompts = [];
+let selStory = -1;
+
+// ====== Album rules ======
+const ALBUM_RULES = {
+  daily_life: {name:"日常生活", desc:"宠物的日常起居", icon:"🏠"},
+  outdoor_adventure: {name:"户外探险", desc:"户外散步和探索", icon:"🌿"},
+  funny_moments: {name:"搞笑瞬间", desc:"有趣的表情和动作", icon:"😂"},
+  sleeping_beauty: {name:"睡颜合集", desc:"各种可爱的睡姿", icon:"😴"},
+  eating_time: {name:"美食时刻", desc:"吃东西的样子", icon:"🍖"},
+  with_friends: {name:"社交时光", desc:"与人或其他动物的互动", icon:"🤝"},
+  portrait: {name:"写真集", desc:"精美的宠物特写和肖像", icon:"📷"},
+  growth: {name:"成长记录", desc:"记录宠物的成长变化", icon:"🌱"},
+};
+
+// ====== API Key ======
+function getKey() { return document.getElementById('apiKeyInput').value.trim(); }
+function checkKey() {
+  const s = document.getElementById('apiStatus');
+  s.className = getKey().startsWith('sk-') ? 'status ok' : 'status';
+}
+
+// ====== Navigation ======
+function go(step) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('sec-'+step).classList.add('active');
+  document.querySelectorAll('.step-dot').forEach(d=>d.classList.remove('active'));
+  document.querySelector(`.step-dot[data-s="${step}"]`).classList.add('active');
+}
+function markDone(step) { document.querySelector(`.step-dot[data-s="${step}"]`).classList.add('done'); }
+
+// ====== File handling ======
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileInput');
+dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('dragover');});
+dz.addEventListener('dragleave', ()=>dz.classList.remove('dragover'));
+dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('dragover');addFiles(e.dataTransfer.files);});
+fi.addEventListener('change', e=>addFiles(e.target.files));
+
+function addFiles(fl) {
+  for(const f of fl) {
+    if(files.length>=30) break;
+    if(!f.type.startsWith('image/')) continue;
+    if(files.some(x=>x.name===f.name&&x.file.size===f.size)) continue;
+    files.push({file:f, url:URL.createObjectURL(f), name:f.name});
+  }
+  renderPrev();
+}
+function removeFile(i) { URL.revokeObjectURL(files[i].url); files.splice(i,1); renderPrev(); }
+
+function renderPrev() {
+  const c=document.getElementById('counter'), cn=document.getElementById('cnt'), b=document.getElementById('btnStart');
+  const g=document.getElementById('previewGrid');
+  c.style.display=files.length?'block':'none'; cn.textContent=files.length;
+  b.disabled=!files.length||!getKey().startsWith('sk-');
+  g.innerHTML=files.map((f,i)=>`
+    <div class="photo-thumb">
+      <img src="${f.url}"><button class="del" onclick="removeFile(${i})">&times;</button>
+      <span class="badge badge-pending">待分析</span>
+    </div>`).join('');
+}
+
+// ====== GPT-4o Vision call ======
+async function callVision(base64, mime) {
+  const key = getKey();
+  const body = {
+    model: "gpt-4o",
+    messages: [{
+      role: "user",
+      content: [
+        {type:"text", text:`你是一个专业的宠物照片分析师。请仔细分析这张照片，以 JSON 格式返回：
+{
+  "description": "2-3句描述，重点描述宠物状态",
+  "pet_info": {"type":"宠物类型","breed":"品种","color":"毛色","size":"体型(小型/中型/大型)","estimated_age":"年龄段","distinctive_features":"显著特征"},
+  "categories": {"pet_type":"","scene":"","activity":"","mood":"","composition":"","time_of_day":"","season":""},
+  "tags": ["最多10个标签"],
+  "emotion_score": 1到10的整数,
+  "story_keywords": ["3-5个故事关键词"],
+  "suggested_albums": ["从 daily_life,outdoor_adventure,funny_moments,sleeping_beauty,eating_time,with_friends,portrait,growth 中选"]
+}
+scene选项: 室内,户外-公园,户外-街道,户外-海滩,户外-山野,宠物店,医院/诊所,车内,其他
+activity选项: 玩耍,睡觉,吃东西,散步,训练,洗澡,与人互动,与其他动物互动,发呆,搞破坏,其他
+mood选项: 开心,兴奋,平静,好奇,困倦,害怕,生气,撒娇,其他
+composition选项: 特写,半身,全身,远景,合影,自拍,抓拍,其他
+只返回JSON，不要其他文字。`},
+        {type:"image_url", image_url:{url:`data:${mime};base64,${base64}`, detail:"high"}}
+      ]
+    }],
+    max_tokens: 1000,
+    temperature: 0.3,
+  };
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {"Content-Type":"application/json", "Authorization":"Bearer "+key},
+    body: JSON.stringify(body),
+  });
+  if(!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  let txt = data.choices[0].message.content.trim();
+  if(txt.startsWith("```")) { txt=txt.split("\n").slice(1).join("\n"); txt=txt.replace(/```$/,''); }
+  return JSON.parse(txt.trim());
+}
+
+function fileToBase64(file) {
+  return new Promise((ok,err)=>{
+    const r=new FileReader();
+    r.onload=()=>ok(r.result.split(',')[1]);
+    r.onerror=err;
+    r.readAsDataURL(file);
+  });
+}
+
+// ====== Analysis ======
+async function startAnalysis() {
+  if(!getKey().startsWith('sk-')) { alert('请输入有效的 OpenAI API Key'); return; }
+  if(!files.length) return;
+
+  markDone('upload');
+  go('analyze');
+
+  const tot=files.length;
+  document.getElementById('pTot').textContent=tot;
+  results=[];
+
+  // build analyze grid
+  const ag=document.getElementById('analyzeGrid');
+  ag.innerHTML=files.map((f,i)=>`
+    <div class="photo-thumb">
+      <img src="${f.url}">
+      <span class="badge badge-pending" id="ab-${i}">等待中</span>
+    </div>`).join('');
+
+  for(let i=0;i<tot;i++) {
+    const f=files[i];
+    document.getElementById('pName').textContent='正在分析: '+f.name;
+    const b=document.getElementById('ab-'+i);
+    if(b){b.className='badge badge-ing';b.textContent='分析中...';}
+
+    try {
+      const base64=await fileToBase64(f.file);
+      const mime=f.file.type||'image/jpeg';
+      const r=await callVision(base64, mime);
+      r.filename=f.name;
+      r._url=f.url;
+      r._idx=i;
+      results.push(r);
+      if(b){b.className='badge badge-done';b.textContent='完成';}
+    } catch(e) {
+      console.error(e);
+      results.push({filename:f.name, _url:f.url, _idx:i, _error:true, description:'分析失败: '+e.message,
+        pet_info:{},categories:{},tags:[],emotion_score:0,story_keywords:[],suggested_albums:[]});
+      if(b){b.className='badge badge-err';b.textContent='失败';}
+    }
+
+    document.getElementById('pCur').textContent=i+1;
+    document.getElementById('pbar').style.width=((i+1)/tot*100)+'%';
+  }
+
+  document.getElementById('pName').textContent='分析完成！';
+  markDone('analyze');
+  buildResults();
+  setTimeout(()=>go('results'),800);
+}
+
+// ====== Build results ======
+function buildResults() {
+  buildAllPhotos();
+  buildAlbums();
+  buildProfile();
+  buildStory();
+}
+
+function buildAllPhotos() {
+  const g=document.getElementById('resGrid');
+  g.innerHTML=results.map((r,i)=>{
+    const c=r.categories||{};
+    return `<div class="rcard" onclick='openM(${i})'>
+      <img class="rcard-img" src="${r._url}">
+      <div class="rcard-body">
+        <div class="rcard-desc">${r.description||''}</div>
+        <div class="rcard-tags">
+          ${c.mood?`<span class="tag tag-mood">${c.mood}</span>`:''}
+          ${c.scene?`<span class="tag tag-scene">${c.scene}</span>`:''}
+          ${c.activity?`<span class="tag tag-act">${c.activity}</span>`:''}
+          ${(r.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('')}
+        </div>
+        <div class="rcard-meta">
+          <span>${r.pet_info?.breed||''}</span>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span>${r.emotion_score||0}/10</span>
+            <div class="emo-bar"><div class="emo-fill" style="width:${(r.emotion_score||0)*10}%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function buildAlbums() {
+  albumsData={};
+  for(const k of Object.keys(ALBUM_RULES)) albumsData[k]=[];
+  results.forEach(r=>{
+    if(r._error) return;
+    const c=r.categories||{};
+    if((c.activity==='发呆'||c.activity==='玩耍')&&c.scene==='室内') albumsData.daily_life.push(r);
+    if((c.scene||'').startsWith('户外')) albumsData.outdoor_adventure.push(r);
+    if(c.mood==='兴奋'||c.mood==='好奇'||c.activity==='搞破坏') albumsData.funny_moments.push(r);
+    if(c.activity==='睡觉'||c.mood==='困倦') albumsData.sleeping_beauty.push(r);
+    if(c.activity==='吃东西') albumsData.eating_time.push(r);
+    if(c.activity==='与人互动'||c.activity==='与其他动物互动'||c.composition==='合影') albumsData.with_friends.push(r);
+    if((c.composition==='特写'||c.composition==='半身')&&(r.emotion_score||0)>=7) albumsData.portrait.push(r);
+    (r.suggested_albums||[]).forEach(ak=>{
+      if(albumsData[ak]&&!albumsData[ak].includes(r)) albumsData[ak].push(r);
+    });
+  });
+
+  const box=document.getElementById('albumBox');
+  const entries=Object.entries(albumsData).filter(([,v])=>v.length>0);
+  if(!entries.length){box.innerHTML='<div class="empty"><span class="icon">📁</span><p>暂无相册分类</p></div>';return;}
+  box.innerHTML=entries.map(([k,photos])=>{
+    const ru=ALBUM_RULES[k];
+    return `<div class="album-sec">
+      <div class="album-hdr">
+        <span style="font-size:26px">${ru.icon}</span>
+        <div><h3>${ru.name} <span class="album-cnt">${photos.length}</span></h3><span class="album-d">${ru.desc}</span></div>
+      </div>
+      <div class="album-row">${photos.map((p,i)=>`
+        <div class="album-item" onclick="openM(${results.indexOf(p)})">
+          <img src="${p._url}"><div class="name">${p.filename}</div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function buildProfile() {
+  const ok=results.filter(r=>!r._error);
+  if(!ok.length){document.getElementById('profBox').innerHTML='<div class="empty"><span class="icon">🐾</span><p>暂无数据</p></div>';return;}
+
+  const freq=(arr)=>{const m={};arr.forEach(v=>{m[v]=(m[v]||0)+1;});return Object.keys(m).sort((a,b)=>m[b]-m[a]);};
+  const types=freq(ok.map(r=>r.pet_info?.type).filter(Boolean));
+  const breeds=freq(ok.map(r=>r.pet_info?.breed).filter(Boolean));
+  const colors=freq(ok.map(r=>r.pet_info?.color).filter(Boolean));
+  const avgEmo=(ok.reduce((s,r)=>s+(r.emotion_score||0),0)/ok.length).toFixed(1);
+  const tagCnt={};ok.forEach(r=>(r.tags||[]).forEach(t=>{tagCnt[t]=(tagCnt[t]||0)+1;}));
+  const topTags=Object.entries(tagCnt).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  const feats=[...new Set(ok.map(r=>r.pet_info?.distinctive_features).filter(Boolean))];
+  const kw=[...new Set(ok.flatMap(r=>r.story_keywords||[]))];
+
+  profileData={type:types[0]||'未知',breed:breeds[0]||'未知',color:colors[0]||'未知',count:ok.length,avgEmo,topTags,feats,kw};
+
+  document.getElementById('profBox').innerHTML=`
+    <div class="profile-card">
+      <h3>🐾 宠物档案</h3>
+      <div class="prow"><span class="plabel">宠物类型</span><span class="pvalue">${profileData.type}</span></div>
+      <div class="prow"><span class="plabel">品种</span><span class="pvalue">${profileData.breed}</span></div>
+      <div class="prow"><span class="plabel">主要毛色</span><span class="pvalue">${profileData.color}</span></div>
+      <div class="prow"><span class="plabel">照片数量</span><span class="pvalue">${profileData.count} 张</span></div>
+      <div class="prow"><span class="plabel">情感均分</span><span class="pvalue">${profileData.avgEmo} / 10</span></div>
+      ${feats.length?`<div class="prow"><span class="plabel">显著特征</span><span class="pvalue">${feats.join('、')}</span></div>`:''}
+      <div class="ptags"><h4>热门标签</h4><div class="tags-cloud">${topTags.map(([t],i)=>`<span class="tc-item${i<3?' hot':''}">${t}</span>`).join('')}</div></div>
+    </div>`;
+}
+
+function buildStory() {
+  storyPrompts=[];
+  const p=profileData; if(!p.type) return;
+  const a=albumsData;
+  const icons=['☀️','🏔️','🌱','😂','💕'];
+
+  if(a.daily_life?.length) {
+    const kw=[...new Set(a.daily_life.flatMap(r=>r.story_keywords||[]))].slice(0,5);
+    storyPrompts.push({title:"日常小确幸",desc:`记录你和${p.breed}的日常生活点滴`,
+      prompt:`写一篇关于你和你的${p.type}（${p.breed}）在家中的温馨日常故事。关键词：${kw.join('、')}`,
+      photos:a.daily_life.map(r=>r.filename)});
+  }
+  if(a.outdoor_adventure?.length) {
+    const scenes=[...new Set(a.outdoor_adventure.map(r=>r.categories?.scene))];
+    storyPrompts.push({title:"户外探险记",desc:"讲述你们一起外出探索的故事",
+      prompt:`写一篇关于你带${p.breed}去户外冒险的故事。去过：${scenes.join('、')}`,
+      photos:a.outdoor_adventure.map(r=>r.filename)});
+  }
+  if(results.length>=3) {
+    storyPrompts.push({title:"成长的故事",desc:"记录你们一起成长的历程",
+      prompt:`看着这${results.length}张照片，讲述你和你的${p.type}一起走过的日子。关键词：${(p.kw||[]).slice(0,6).join('、')}`,
+      photos:results.slice(0,5).map(r=>r.filename)});
+  }
+  if(a.funny_moments?.length) {
+    storyPrompts.push({title:"爆笑日记",desc:"那些让你捧腹大笑的瞬间",
+      prompt:`你的${p.breed}总是做出让人意想不到的事。描述最搞笑的一个瞬间。`,
+      photos:a.funny_moments.map(r=>r.filename)});
+  }
+  if(a.with_friends?.length) {
+    storyPrompts.push({title:"我们的羁绊",desc:"关于你和宠物之间特殊的情感连接",
+      prompt:`写一封给你的${p.type}的信，告诉它你有多爱它，分享最特别的回忆。`,
+      photos:a.with_friends.map(r=>r.filename)});
+  }
+
+  const sg=document.getElementById('storyGrid');
+  if(!storyPrompts.length){sg.innerHTML='<div class="empty"><span class="icon">📖</span><p>暂无故事方向</p></div>';return;}
+  sg.innerHTML=storyPrompts.map((s,i)=>`
+    <div class="scard" id="sc-${i}" onclick="selS(${i})">
+      <h4>${icons[i]||'📖'} ${s.title}</h4>
+      <p>${s.desc}</p>
+      <div class="srel">相关照片: ${s.photos.slice(0,3).join(', ')}</div>
+    </div>`).join('');
+}
+
+function selS(i) {
+  selStory=i;
+  document.querySelectorAll('.scard').forEach((c,j)=>c.classList.toggle('selected',j===i));
+  document.getElementById('storyIn').style.display='block';
+  document.getElementById('storyOut').classList.remove('show');
+}
+
+async function genStory() {
+  if(selStory<0) return;
+  const sp=storyPrompts[selStory], notes=document.getElementById('storyNotes').value;
+  const btn=document.getElementById('btnStory'), out=document.getElementById('storyOut');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> 生成中...';
+  out.classList.remove('show');
+
+  // Collect descriptions of related photos
+  const relDescs=sp.photos.slice(0,5).map(fn=>{
+    const r=results.find(x=>x.filename===fn);
+    return r?`- ${fn}: ${r.description}`:'';
+  }).filter(Boolean).join('\n');
+
+  const body={
+    model:"gpt-4o",
+    messages:[
+      {role:"system",content:"你是一位善于捕捉宠物与人之间温暖瞬间的故事作家。写出真挚、温暖、有画面感的故事，像和朋友分享一样自然亲切。300-500字。"},
+      {role:"user",content:`请帮我写一篇宠物故事。\n\n方向: ${sp.title}\n提示: ${sp.prompt}\n\n宠物信息:\n- 类型: ${profileData.type}\n- 品种: ${profileData.breed}\n- 毛色: ${profileData.color}\n- 特征: ${(profileData.feats||[]).join('、')}\n\n相关照片描述:\n${relDescs}\n${notes?'\n我的补充: '+notes:''}\n\n请为我写一篇温暖的宠物故事：`}
+    ],
+    max_tokens:1500,temperature:0.8,
+  };
+  try {
+    const res=await fetch("https://api.openai.com/v1/chat/completions",{
+      method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+getKey()},
+      body:JSON.stringify(body),
+    });
+    const data=await res.json();
+    out.textContent=data.choices[0].message.content.trim();
+    out.classList.add('show');
+  } catch(e){ alert('生成失败: '+e.message); }
+  btn.disabled=false; btn.innerHTML='生成故事';
+}
+
+// ====== Modal ======
+function openM(idx) {
+  const r=results[idx]; if(!r) return;
+  document.getElementById('mImg').src=r._url;
+  const c=r.categories||{}, pet=r.pet_info||{};
+  document.getElementById('mBody').innerHTML=`
+    <h3>${r.filename}</h3>
+    <p class="desc">${r.description||''}</p>
+    <div class="dgrid">
+      <div class="ditem"><div class="dl">宠物类型</div><div class="dv">${pet.type||'-'}</div></div>
+      <div class="ditem"><div class="dl">品种</div><div class="dv">${pet.breed||'-'}</div></div>
+      <div class="ditem"><div class="dl">毛色</div><div class="dv">${pet.color||'-'}</div></div>
+      <div class="ditem"><div class="dl">体型</div><div class="dv">${pet.size||'-'}</div></div>
+      <div class="ditem"><div class="dl">年龄段</div><div class="dv">${pet.estimated_age||'-'}</div></div>
+      <div class="ditem"><div class="dl">情感分数</div><div class="dv">${r.emotion_score||'-'}/10</div></div>
+      <div class="ditem"><div class="dl">场景</div><div class="dv">${c.scene||'-'}</div></div>
+      <div class="ditem"><div class="dl">活动</div><div class="dv">${c.activity||'-'}</div></div>
+      <div class="ditem"><div class="dl">情绪</div><div class="dv">${c.mood||'-'}</div></div>
+      <div class="ditem"><div class="dl">构图</div><div class="dv">${c.composition||'-'}</div></div>
+    </div>
+    ${pet.distinctive_features?`<div style="margin-bottom:10px;"><span style="font-size:12px;color:var(--text2)">特征: </span><span style="font-size:13px">${pet.distinctive_features}</span></div>`:''}
+    <div class="rcard-tags">${(r.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+    ${(r.story_keywords||[]).length?`<div style="margin-top:14px;"><span style="font-size:12px;color:var(--text2)">故事关键词: </span>${r.story_keywords.map(k=>`<span class="tag" style="background:rgba(251,146,60,.1);color:var(--orange);border-color:rgba(251,146,60,.25)">${k}</span>`).join(' ')}</div>`:''}
+  `;
+  document.getElementById('modal').classList.add('show');
+}
+function closeM(){ document.getElementById('modal').classList.remove('show'); }
+
+// ====== Tabs ======
+function stab(id,el) {
+  document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tp-'+id).classList.add('active');
+}
+
+// ====== Export ======
+function exportJSON() {
+  const data={
+    export_time:new Date().toISOString(),
+    total_photos:results.length,
+    pet_profile:profileData,
+    albums:Object.fromEntries(Object.entries(albumsData).filter(([,v])=>v.length).map(([k,v])=>[k,{name:ALBUM_RULES[k].name,count:v.length,photos:v.map(p=>p.filename)}])),
+    photos:results.map(r=>{const{_url,_idx,...rest}=r;return rest;}),
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='pet_photo_analysis.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
